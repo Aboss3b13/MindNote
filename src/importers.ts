@@ -1,5 +1,7 @@
 import type { SourceKind } from './types'
+import { Capacitor } from '@capacitor/core'
 const normalize = (text: string) => text.replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{4,}/g, '\n\n\n').trim()
+const apiUrl = (file: string) => Capacitor.isNativePlatform() ? `https://abbas.ali-raza.net/Mindnotes/api/${file}` : `./api/${file}`
 
 export function kindForFile(file: File): SourceKind {
   const ext = file.name.split('.').pop()?.toLowerCase()
@@ -79,11 +81,19 @@ export async function extractFile(file: File): Promise<{ kind: SourceKind; text:
   return { kind, text }
 }
 
-export async function extractRemote(serverUrl: string, token: string, url: string): Promise<{ title: string; text: string; kind: SourceKind }> {
-  const response = await fetch(`${serverUrl.replace(/\/$/, '')}/api/extract`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ url }),
+export async function extractRemote(url: string): Promise<{ title: string; text: string; kind: SourceKind }> {
+  const response = await fetch(apiUrl('extract.php'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
   })
   const result = await response.json()
   if (!response.ok) throw new Error(result.error || 'The source could not be imported.')
+  return result
+}
+
+export async function extractFileOnServer(file: File): Promise<{ title: string; text: string; kind: SourceKind }> {
+  const form = new FormData(); form.append('file', file)
+  const response = await fetch(apiUrl('extract-file.php'), { method: 'POST', body: form })
+  const result = await response.json()
+  if (!response.ok) throw new Error(result.error || 'The file could not be read.')
   return result
 }

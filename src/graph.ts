@@ -35,12 +35,17 @@ export function buildGraph(workspace: Workspace, filters: GraphFilters, focusId 
     selectedEdges.forEach((edge) => { if (edge.from === focusId) neighbourIds.add(edge.to); if (edge.to === focusId) neighbourIds.add(edge.from) })
     selectedNodes = selectedNodes.filter((node) => neighbourIds.has(node.id))
     selectedEdges = selectedEdges.filter((edge) => neighbourIds.has(edge.from) && neighbourIds.has(edge.to))
-  } else if (selectedNodes.length > 320) {
+  } else {
     const degree = new Map<string, number>()
     selectedEdges.forEach((edge) => { degree.set(edge.from, (degree.get(edge.from) || 0) + 1); degree.set(edge.to, (degree.get(edge.to) || 0) + 1) })
-    const allowed = new Set(selectedNodes.sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0)).slice(0, 320).map((node) => node.id))
-    selectedNodes = selectedNodes.filter((node) => allowed.has(node.id))
-    selectedEdges = selectedEdges.filter((edge) => allowed.has(edge.from) && allowed.has(edge.to)).slice(0, 900)
+    const overview: GraphNode[] = [], allowed = new Set<string>()
+    ;(['folder','note','tag','source'] as const).forEach((kind) => {
+      const group = selectedNodes.filter((node) => node.kind === kind).sort((a,b) => (degree.get(b.id)||0)-(degree.get(a.id)||0) || a.label.localeCompare(b.label))
+      group.slice(0, group.length > 12 ? 11 : 12).forEach((node) => { overview.push(node); allowed.add(node.id) })
+      if (group.length > 12) overview.push({ id:`aggregate:${kind}`, rawId:'', kind, label:`${group.length-11} more`, color:'#8b5a39', count:group.length, x:0, y:0 })
+    })
+    selectedNodes = overview
+    selectedEdges = selectedEdges.filter((edge) => allowed.has(edge.from) && allowed.has(edge.to)).slice(0,240)
   }
   return layoutGraph(selectedNodes, selectedEdges, focusId)
 }
