@@ -2,6 +2,8 @@
 
 MindNotes is a private, local-first app for connected note-taking. Notes can be related directly or through folders, hashtags, and imported sources, and every relationship becomes part of an interactive mind map.
 
+**Live app:** [abbas.ali-raza.net/Mindnotes](https://abbas.ali-raza.net/Mindnotes)
+
 ## Included
 
 - Feature-rich notes with status, favourites, folders, hashtags, source citations, and direct links
