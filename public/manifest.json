@@ -1,0 +1,5 @@
+{
+  "name": "MindNotes", "short_name": "MindNotes", "start_url": "./", "display": "standalone",
+  "background_color": "#f3eee3", "theme_color": "#173c36",
+  "description": "Connected notes, sources, and visual thinking."
+}
