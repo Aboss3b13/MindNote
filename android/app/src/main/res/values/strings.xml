@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MindNotes</string>
+    <string name="title_activity_main">MindNotes</string>
+    <string name="package_name">com.aboss3b13.mindnotes</string>
+    <string name="custom_url_scheme">com.aboss3b13.mindnotes</string>
+</resources>

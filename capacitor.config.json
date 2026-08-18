@@ -1,0 +1,6 @@
+{
+  "appId": "com.aboss3b13.mindnotes",
+  "appName": "MindNotes",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#f4efe4", "allowMixedContent": false }
+}

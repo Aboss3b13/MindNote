@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+server/data/
+android/.gradle/
+android/local.properties
+android/app/build/
+*.keystore
+*.jks
+*.log
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
