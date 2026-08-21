@@ -1,75 +1,98 @@
-import type { GraphEdge, GraphNode, Workspace } from './types'
+import type { GraphEdge, GraphKind, GraphNode, Workspace } from './types'
 
 export interface GraphFilters { notes: boolean; folders: boolean; tags: boolean; sources: boolean }
-export function buildGraph(workspace: Workspace, filters: GraphFilters, focusId = ''): { nodes: GraphNode[]; edges: GraphEdge[] } {
+export interface GraphResult { nodes: GraphNode[]; edges: GraphEdge[]; totals: Record<GraphKind, number>; optimized: boolean }
+
+const limits: Record<GraphKind, number> = { folder: 60, note: 260, tag: 100, source: 100 }
+const tabletLimits: Record<GraphKind, number> = { folder: 40, note: 135, tag: 60, source: 60 }
+
+export function buildGraph(workspace: Workspace, filters: GraphFilters, focusId = '', compact = false): GraphResult {
   const nodes = new Map<string, GraphNode>()
   const edges = new Map<string, GraphEdge>()
-  const addNode = (node: Omit<GraphNode, 'x' | 'y'>) => { if (!nodes.has(node.id)) nodes.set(node.id, { ...node, x: 0, y: 0 }) }
-  const addEdge = (from: string, to: string, kind: GraphEdge['kind']) => {
-    const id = `${from}|${to}|${kind}`
-    if (!edges.has(id)) edges.set(id, { id, from, to, kind })
+  const addNode = (node: Omit<GraphNode, 'x' | 'y'>) => {
+    if (!nodes.has(node.id)) nodes.set(node.id, { ...node, x: 0, y: 0 })
   }
+  const addEdge = (from: string, to: string, kind: GraphEdge['kind']) => {
+    if (from === to) return
+    const pair = kind === 'link' && from > to ? [to, from] : [from, to]
+    const id = `${pair[0]}|${pair[1]}|${kind}`
+    if (!edges.has(id)) edges.set(id, { id, from: pair[0], to: pair[1], kind })
+  }
+
   const sourceById = new Map(workspace.sources.map((source) => [source.id, source]))
+  const folderById = new Map(workspace.folders.map((folder) => [folder.id, folder]))
+  const noteIds = new Set(workspace.notes.map((note) => note.id))
   const tagCounts = new Map<string, number>()
-  workspace.notes.forEach((note) => note.tags.forEach((tag) => tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1)))
-  if (filters.folders) workspace.folders.forEach((folder) => addNode({ id: `folder:${folder.id}`, rawId: folder.id, kind: 'folder', label: folder.name, color: folder.color }))
+  workspace.notes.forEach((note) => note.tags.forEach((tag) => {
+    const normalized = tag.trim().toLocaleLowerCase()
+    if (normalized) tagCounts.set(normalized, (tagCounts.get(normalized) || 0) + 1)
+  }))
+
+  workspace.folders.forEach((folder) => {
+    addNode({ id: `folder:${folder.id}`, rawId: folder.id, kind: 'folder', label: folder.name, color: folder.color })
+    if (folder.parentId && folderById.has(folder.parentId)) addEdge(`folder:${folder.parentId}`, `folder:${folder.id}`, 'folder')
+  })
+  workspace.sources.forEach((source) => addNode({
+    id: `source:${source.id}`, rawId: source.id, kind: 'source', label: source.title,
+    color: '#168b7a', summary: source.text.slice(0, 220),
+  }))
   workspace.notes.forEach((note) => {
-    if (filters.notes) addNode({ id: `note:${note.id}`, rawId: note.id, kind: 'note', label: note.title || 'Untitled', color: note.color })
-    if (filters.folders && note.folderId) addEdge(`note:${note.id}`, `folder:${note.folderId}`, 'folder')
-    if (filters.tags) note.tags.forEach((tag) => {
-      addNode({ id: `tag:${tag.toLowerCase()}`, rawId: tag, kind: 'tag', label: `#${tag}`, color: '#8671ad', count: tagCounts.get(tag) || 1 })
-      addEdge(`note:${note.id}`, `tag:${tag.toLowerCase()}`, 'tag')
+    const noteId = `note:${note.id}`
+    addNode({ id: noteId, rawId: note.id, kind: 'note', label: note.title.trim() || 'Untitled note', color: note.color, summary: note.body })
+    if (note.folderId && folderById.has(note.folderId)) addEdge(`folder:${note.folderId}`, noteId, 'folder')
+    note.tags.forEach((tag) => {
+      const normalized = tag.trim().toLocaleLowerCase()
+      if (!normalized) return
+      addNode({ id: `tag:${normalized}`, rawId: normalized, kind: 'tag', label: `#${normalized}`, color: '#8355cf', count: tagCounts.get(normalized) || 1 })
+      addEdge(noteId, `tag:${normalized}`, 'tag')
     })
-    if (filters.sources) note.sourceIds.forEach((sourceId) => {
-      const source = sourceById.get(sourceId)
-      if (source) addNode({ id: `source:${source.id}`, rawId: source.id, kind: 'source', label: source.title, color: '#3d7b70' })
-      addEdge(`note:${note.id}`, `source:${sourceId}`, 'source')
+    note.sourceIds.forEach((sourceId) => {
+      if (sourceById.has(sourceId)) addEdge(noteId, `source:${sourceId}`, 'source')
     })
-    if (filters.notes) note.linkedNoteIds.forEach((linkedId) => addEdge(`note:${note.id}`, `note:${linkedId}`, 'link'))
+    note.linkedNoteIds.forEach((linkedId) => {
+      if (noteIds.has(linkedId)) addEdge(noteId, `note:${linkedId}`, 'link')
+    })
   })
 
-  let selectedNodes = [...nodes.values()]
-  let selectedEdges = [...edges.values()].filter((edge) => nodes.has(edge.from) && nodes.has(edge.to))
-  if (focusId && nodes.has(focusId)) {
-    const neighbourIds = new Set([focusId])
-    selectedEdges.forEach((edge) => { if (edge.from === focusId) neighbourIds.add(edge.to); if (edge.to === focusId) neighbourIds.add(edge.from) })
-    selectedNodes = selectedNodes.filter((node) => neighbourIds.has(node.id))
-    selectedEdges = selectedEdges.filter((edge) => neighbourIds.has(edge.from) && neighbourIds.has(edge.to))
-  } else {
-    const degree = new Map<string, number>()
-    selectedEdges.forEach((edge) => { degree.set(edge.from, (degree.get(edge.from) || 0) + 1); degree.set(edge.to, (degree.get(edge.to) || 0) + 1) })
-    const overview: GraphNode[] = [], allowed = new Set<string>()
-    ;(['folder','note','tag','source'] as const).forEach((kind) => {
-      const group = selectedNodes.filter((node) => node.kind === kind).sort((a,b) => (degree.get(b.id)||0)-(degree.get(a.id)||0) || a.label.localeCompare(b.label))
-      group.slice(0, group.length > 12 ? 11 : 12).forEach((node) => { overview.push(node); allowed.add(node.id) })
-      if (group.length > 12) overview.push({ id:`aggregate:${kind}`, rawId:'', kind, label:`${group.length-11} more`, color:'#8b5a39', count:group.length, x:0, y:0 })
-    })
-    selectedNodes = overview
-    selectedEdges = selectedEdges.filter((edge) => allowed.has(edge.from) && allowed.has(edge.to)).slice(0,240)
-  }
-  return layoutGraph(selectedNodes, selectedEdges, focusId)
-}
+  const allowedKinds = new Set<GraphKind>()
+  if (filters.notes) allowedKinds.add('note')
+  if (filters.folders) allowedKinds.add('folder')
+  if (filters.tags) allowedKinds.add('tag')
+  if (filters.sources) allowedKinds.add('source')
+  let selectedNodes = [...nodes.values()].filter((node) => allowedKinds.has(node.kind))
+  let selectedIds = new Set(selectedNodes.map((node) => node.id))
+  let selectedEdges = [...edges.values()].filter((edge) => selectedIds.has(edge.from) && selectedIds.has(edge.to))
+  const totals = selectedNodes.reduce((value, node) => {
+    value[node.kind] += 1
+    return value
+  }, { folder: 0, note: 0, tag: 0, source: 0 } as Record<GraphKind, number>)
 
-function layoutGraph(nodes: GraphNode[], edges: GraphEdge[], focusId: string) {
-  const byKind = ['folder', 'source', 'tag', 'note'] as const
-  const width = 1400, height = 900, center = { x: width / 2, y: height / 2 }
-  if (focusId) {
-    nodes.forEach((node, index) => {
-      if (node.id === focusId) { node.x = center.x; node.y = center.y; return }
-      const angle = ((index - Number(nodes[0]?.id === focusId)) / Math.max(1, nodes.length - 1)) * Math.PI * 2 - Math.PI / 2
-      const radius = Math.min(330, 150 + nodes.length * 9)
-      node.x = center.x + Math.cos(angle) * radius; node.y = center.y + Math.sin(angle) * radius
+  if (focusId && selectedIds.has(focusId)) {
+    const neighbourhood = new Set([focusId])
+    selectedEdges.forEach((edge) => {
+      if (edge.from === focusId) neighbourhood.add(edge.to)
+      if (edge.to === focusId) neighbourhood.add(edge.from)
     })
-  } else {
-    byKind.forEach((kind, kindIndex) => {
-      const group = nodes.filter((node) => node.kind === kind)
-      group.forEach((node, index) => {
-        const cols = Math.max(1, Math.ceil(Math.sqrt(group.length * 1.5)))
-        const col = index % cols, row = Math.floor(index / cols)
-        const zoneX = 180 + (kindIndex % 2) * 680, zoneY = 150 + Math.floor(kindIndex / 2) * 420
-        node.x = zoneX + col * 170; node.y = zoneY + row * 100
-      })
-    })
+    selectedNodes = selectedNodes.filter((node) => neighbourhood.has(node.id))
+    selectedEdges = selectedEdges.filter((edge) => neighbourhood.has(edge.from) && neighbourhood.has(edge.to))
+    return { nodes: selectedNodes, edges: selectedEdges, totals, optimized: false }
   }
-  return { nodes, edges }
+
+  const degree = new Map<string, number>()
+  selectedEdges.forEach((edge) => {
+    degree.set(edge.from, (degree.get(edge.from) || 0) + 1)
+    degree.set(edge.to, (degree.get(edge.to) || 0) + 1)
+  })
+  const activeLimits = compact ? tabletLimits : limits
+  const bounded: GraphNode[] = []
+  ;(['folder', 'note', 'tag', 'source'] as GraphKind[]).forEach((kind) => {
+    const group = selectedNodes.filter((node) => node.kind === kind).sort((a, b) =>
+      (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.label.localeCompare(b.label))
+    bounded.push(...group.slice(0, activeLimits[kind]))
+  })
+  const optimized = bounded.length < selectedNodes.length
+  selectedNodes = bounded
+  selectedIds = new Set(selectedNodes.map((node) => node.id))
+  selectedEdges = selectedEdges.filter((edge) => selectedIds.has(edge.from) && selectedIds.has(edge.to)).slice(0, compact ? 560 : 2400)
+  return { nodes: selectedNodes, edges: selectedEdges, totals, optimized }
 }

@@ -64,18 +64,43 @@ async function extractSpreadsheet(buffer: ArrayBuffer, fileName: string): Promis
   return output.join('\n\n')
 }
 
+async function extractOpenDocument(buffer: ArrayBuffer): Promise<string> {
+  const { default: JSZip } = await import('jszip')
+  const zip = await JSZip.loadAsync(buffer)
+  const content = zip.file('content.xml')
+  if (!content) throw new Error('This document does not contain readable OpenDocument text.')
+  const xml = new DOMParser().parseFromString(await content.async('text'), 'application/xml')
+  return [...xml.querySelectorAll('text\\:p, text\\:h, table\\:table-cell, draw\\:text-box')].map((node) => node.textContent || '').filter(Boolean).join('\n') || xml.documentElement.textContent || ''
+}
+
+function extractMarkup(text: string, type: DOMParserSupportedType = 'text/html') {
+  const document = new DOMParser().parseFromString(text, type)
+  document.querySelectorAll('script,style,noscript,svg').forEach((node) => node.remove())
+  return document.body?.innerText || document.documentElement.textContent || ''
+}
+
+function extractRtf(text: string) {
+  return text.replace(/\\'[0-9a-f]{2}/gi, ' ').replace(/\\(?:par|line)\b/g, '\n').replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '')
+}
+
 export async function extractFile(file: File): Promise<{ kind: SourceKind; text: string }> {
   const kind = kindForFile(file)
+  const extension = file.name.split('.').pop()?.toLowerCase() || ''
   const buffer = await file.arrayBuffer()
   let text = ''
   if (kind === 'pdf') text = await extractPdf(buffer)
-  else if (kind === 'word' && file.name.toLowerCase().endsWith('.docx')) {
+  else if (kind === 'word' && extension === 'docx') {
     const mammoth = await import('mammoth/mammoth.browser')
     text = (await mammoth.extractRawText({ arrayBuffer: buffer })).value
   }
-  else if (kind === 'powerpoint' && file.name.toLowerCase().endsWith('.pptx')) text = await extractPowerPoint(buffer)
+  else if (['odt', 'odp', 'ods'].includes(extension)) text = await extractOpenDocument(buffer)
+  else if (kind === 'powerpoint' && extension === 'pptx') text = await extractPowerPoint(buffer)
   else if (kind === 'spreadsheet') text = await extractSpreadsheet(buffer, file.name)
-  else text = new TextDecoder().decode(buffer)
+  else if (['txt','md','markdown','csv','json'].includes(extension)) text = new TextDecoder().decode(buffer)
+  else if (['html','htm'].includes(extension)) text = extractMarkup(new TextDecoder().decode(buffer))
+  else if (extension === 'xml') text = extractMarkup(new TextDecoder().decode(buffer), 'application/xml')
+  else if (extension === 'rtf') text = extractRtf(new TextDecoder().decode(buffer))
+  else throw new Error('This file needs server extraction. Supported formats include PDF, Word, PowerPoint, Excel, OpenDocument, CSV, HTML, XML, Markdown, JSON, and plain text.')
   text = normalize(text)
   if (!text) throw new Error('No readable text was found in this file.')
   return { kind, text }

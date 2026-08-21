@@ -4,14 +4,16 @@ MindNotes is a private, local-first app for connected note-taking. Notes can be 
 
 **Live app:** [abbas.ali-raza.net/Mindnotes](https://abbas.ali-raza.net/Mindnotes)
 
-**Android preview:** [Download MindNotes v0.2.0](https://github.com/Aboss3b13/MindNote/releases/download/v0.2.0/MindNotes-v0.2.0-debug.apk)
+**Android preview:** [Download MindNotes v0.3.0](https://github.com/Aboss3b13/MindNote/releases/download/v0.3.0/MindNotes-v0.3.0-debug.apk)
 
 ## Included
 
-- Feature-rich notes with status, favourites, folders, hashtags, source citations, and direct links
-- Interactive canvas mind map with focus mode, filters, pan, zoom, and layouts bounded for large libraries
+- Abrahamic Books-style note list, folder browser, editor, search, and responsive bottom navigation
+- Feature-rich notes with status, favourites, folders, hashtags, exact source excerpts, citations, and direct links
+- Select any phrase in an imported source to create a linked note or append it to an existing note
+- Interactive Abrahamic Books-style canvas mind map with focus mode, filters, pan, pinch/scroll zoom, animated reflow, and layouts bounded for large libraries
 - Full-text search across notes and extracted source content
-- On-device extraction for PDF, DOCX, PPTX, Excel/CSV, text, Markdown, HTML, and JSON files
+- On-device extraction for PDF, DOCX, PPTX, Excel/CSV, OpenDocument, RTF, text, Markdown, HTML, XML, and JSON files
 - Simple email/password accounts with automatic end-to-end encrypted server sync
 - Built-in website, YouTube transcript, and PDF extraction endpoints
 - Responsive phone, tablet, and desktop layouts
